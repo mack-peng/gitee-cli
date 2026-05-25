@@ -1,0 +1,35 @@
+{
+  "name": "@oc-forge/gitee-cli",
+  "version": "0.2.0",
+  "description": "Gitee (码云) command-line tool — like gh, but for Gitee",
+  "type": "module",
+  "main": "dist/bundle.js",
+  "types": "dist/bundle.d.ts",
+  "bin": {
+    "gitee-cli": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "gitee",
+    "cli",
+    "git",
+    "vcs"
+  ],
+  "author": "小橘",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
