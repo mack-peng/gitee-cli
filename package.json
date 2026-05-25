@@ -21,6 +21,14 @@
   ],
   "author": "小橘",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mack-peng/gitee-cli.git"
+  },
+  "homepage": "https://github.com/mack-peng/gitee-cli#readme",
+  "bugs": {
+    "url": "https://github.com/mack-peng/gitee-cli/issues"
+  },
   "dependencies": {
     "commander": "^12.1.0"
   },
