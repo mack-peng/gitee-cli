@@ -41,7 +41,7 @@ export async function apiRequest<T = unknown>(
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'Accept': 'application/json',
-    'User-Agent': 'gitee-cli/0.2.0',
+    'User-Agent': '@orangemust/gitee-cli',
   };
 
   const fetchOptions: RequestInit = {

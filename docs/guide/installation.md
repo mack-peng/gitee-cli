@@ -6,13 +6,13 @@ You are an AI agent (Claude Code, Cursor, Codex, etc.). This guide is written fo
 
 If a human pasted this to you, follow the instructions below:
 
-> Install and configure `@oc-forge/gitee-cli` using the guide at `docs/guide/installation.md`. First check if `GITEE_TOKEN` is set or `~/.gitee-cli/config.json` exists, then ask me for a Gitee Personal Access Token if needed. Verify with `gitee-cli auth status` or `gitee-cli repo list`.
+> Install and configure `@orangemust/gitee-cli` using the guide at `docs/guide/installation.md`. First check if `GITEE_TOKEN` is set or `~/.gitee-cli/config.json` exists, then ask me for a Gitee Personal Access Token if needed. Verify with `gitee-cli auth status` or `gitee-cli repo list`.
 
 ---
 
 ## What You're Installing
 
-`@oc-forge/gitee-cli` is a CLI tool that lets you (the agent) manage Gitee (码云) repositories, issues, pull requests, releases, and organizations — all from the command line.
+`@orangemust/gitee-cli` is a CLI tool that lets you (the agent) manage Gitee (码云) repositories, issues, pull requests, releases, and organizations — all from the command line.
 
 Humans should not type these commands. You should.
 
@@ -21,14 +21,14 @@ Humans should not type these commands. You should.
 ## Step 1: Install the Package
 
 ```bash
-npm install -g @oc-forge/gitee-cli
+npm install -g @orangemust/gitee-cli
 ```
 
 Or run without installing (slower but zero setup):
 
 ```bash
-npx @oc-forge/gitee-cli repo view owner/repo
-npx @oc-forge/gitee-cli auth status
+npx @orangemust/gitee-cli repo view owner/repo
+npx @orangemust/gitee-cli auth status
 ```
 
 Verify:
@@ -46,7 +46,7 @@ export PATH="$(npm root -g)/../bin:$PATH"
 If you get a permission error on macOS/Linux:
 
 ```bash
-sudo npm install -g @oc-forge/gitee-cli
+sudo npm install -g @orangemust/gitee-cli
 ```
 
 ---
@@ -259,7 +259,7 @@ then run any command without running `gitee-cli auth login`.
 → The token doesn't have the required scope for this operation. Create a new token with broader scopes.
 
 **"Cannot find module"**
-→ Global install didn't register. Re-run `npm install -g @oc-forge/gitee-cli`.
+→ Global install didn't register. Re-run `npm install -g @orangemust/gitee-cli`.
 
 **"Could not determine repository"**
 → Not in a Gitee git directory and no `--repo` flag. Either `cd` into the repo or pass `--repo owner/repo`.
@@ -283,7 +283,7 @@ gitee-cli pr list --json | jq '.[] | select(.state == "open") | .title'
 For agents that trust copy-paste:
 
 ```bash
-npm install -g @oc-forge/gitee-cli && echo "your_token" | gitee-cli auth login --with-token && gitee-cli auth status
+npm install -g @orangemust/gitee-cli && echo "your_token" | gitee-cli auth login --with-token && gitee-cli auth status
 ```
 
 Replace `your_token` with the actual token. Humans can paste this and you handle the rest.

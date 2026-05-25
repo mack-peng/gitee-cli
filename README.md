@@ -1,18 +1,18 @@
-# @oc-forge/gitee-cli
+# @orangemust/gitee-cli
 
 Gitee (码云) 命令行工具 — like gh, but for Gitee.
 
-[![npm version](https://img.shields.io/npm/v/@oc-forge/gitee-cli.svg)](https://www.npmjs.com/package/@oc-forge/gitee-cli)
+[![npm version](https://img.shields.io/npm/v/@orangemust/gitee-cli.svg)](https://www.npmjs.com/package/@orangemust/gitee-cli)
 
 ---
 
 ## Installation
 
 ```bash
-npm install -g @oc-forge/gitee-cli
+npm install -g @orangemust/gitee-cli
 
 # Or run without installing:
-# npx @oc-forge/gitee-cli repo view
+# npx @orangemust/gitee-cli repo view
 ```
 
 ### Build from source
