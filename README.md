@@ -18,7 +18,7 @@ npm install -g @orangemust/gitee-cli
 ### Build from source
 
 ```bash
-git clone https://github.com/shazhou-ww/gitee-cli.git
+git clone https://github.com/mack-peng/gitee-cli.git
 cd gitee-cli
 npm install
 npm run build
