@@ -8,26 +8,37 @@ Gitee (码云) 命令行工具 — like gh, but for Gitee.
 
 ## Installation
 
+### For Humans
+
+Copy and paste this prompt to your LLM agent (Claude Code, Cursor, Codex, etc.):
+
+```text
+Install and configure gitee-cli by following the instructions here:
+https://raw.githubusercontent.com/mack-peng/gitee-cli/main/docs/guide/installation.md
+```
+
+Or read the [Installation Guide](docs/guide/installation.md), but seriously, let an agent do it. Humans fat-finger configs.
+
+### For LLM Agents
+
+Fetch the installation guide and follow it:
+
+```bash
+curl -s https://raw.githubusercontent.com/mack-peng/gitee-cli/main/docs/guide/installation.md
+```
+
+---
+
+## Quick Start
+
+### Install
+
 ```bash
 npm install -g @orangemust/gitee-cli
 
 # Or run without installing:
 # npx @orangemust/gitee-cli repo view
 ```
-
-### Build from source
-
-```bash
-git clone https://github.com/mack-peng/gitee-cli.git
-cd gitee-cli
-npm install
-npm run build
-npm link
-```
-
----
-
-## Quick Start
 
 ### 1. Authentication
 
@@ -192,8 +203,11 @@ gitee-cli api GET /user --no-auth               # 跳过认证
 ## Development
 
 ```bash
+git clone https://github.com/mack-peng/gitee-cli.git
+cd gitee-cli
 npm install
 npm run build
+npm link
 npm run dev
 npx tsc --noEmit
 ```
