@@ -1,7 +1,74 @@
 import { Command } from 'commander';
 import { getToken } from '../utils/config.js';
 import { GiteeClient, resolveRepo, handleError } from '../api/client.js';
-import { PrAPI } from '../api/pr.js';
+import { PrAPI, PRComment } from '../api/pr.js';
+import { resolveDiffPosition } from '../utils/diff-position.js';
+
+function parsePositiveInt(value: string, name: string): number {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    console.error(`Error: --${name} must be a positive integer.`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
+function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+function buildReplyBody(
+  parentBody: string,
+  parentUser: string | undefined,
+  body: string,
+  options: { quote: boolean; mention: boolean }
+): string {
+  const parts: string[] = [];
+
+  if (options.quote) {
+    const allLines = parentBody.split('\n');
+    let quoted = allLines
+      .slice(0, 5)
+      .map((line) => `> ${line}`)
+      .join('\n');
+    if (quoted.length > 800) quoted = `${quoted.slice(0, 800)}…`;
+    if (allLines.length > 5) quoted += '\n> …';
+    parts.push(quoted);
+  }
+
+  if (options.mention && parentUser) {
+    parts.push(`@${parentUser}`);
+  }
+
+  parts.push(body);
+  return parts.join('\n\n');
+}
+
+async function resolveParentPosition(
+  api: PrAPI,
+  owner: string,
+  repo: string,
+  number: string,
+  parent: PRComment
+): Promise<number | undefined> {
+  const parentPosition = Number(parent.position);
+  if (Number.isInteger(parentPosition) && parentPosition > 0) {
+    return parentPosition;
+  }
+
+  const newLine = Number(parent.new_line);
+  if (!parent.path || !Number.isInteger(newLine) || newLine <= 0) {
+    return undefined;
+  }
+
+  const files = await api.listFiles(owner, repo, number);
+  const file = files.find((candidate) => candidate.filename === parent.path);
+  if (!file?.patch?.diff) {
+    return undefined;
+  }
+
+  return resolveDiffPosition(file.patch.diff, newLine);
+}
 
 export function registerPrCommands(program: Command): void {
   const pr = program
@@ -207,8 +274,20 @@ export function registerPrCommands(program: Command): void {
     .description('Add a comment to a pull request')
     .option('--repo <owner/repo>', 'Repository (owner/repo)')
     .requiredOption('--body <comment>', 'Comment body')
+    .option('--path <file>', 'File path for an inline comment')
+    .option('--line <n>', 'New-file line number for an inline comment')
+    .option('--position <n>', 'Diff position for an inline comment')
+    .option('--commit-id <sha>', 'Commit SHA for an inline comment')
     .option('--json', 'Output raw JSON')
-    .action(async (number: string, opts: { repo?: string; body: string; json?: boolean }) => {
+    .action(async (number: string, opts: {
+      repo?: string;
+      body: string;
+      path?: string;
+      line?: string;
+      position?: string;
+      commitId?: string;
+      json?: boolean;
+    }) => {
       const token = getToken();
       if (!token) {
         console.error('Error: Authentication required. Run `gitee-cli auth login` or set GITEE_TOKEN.');
@@ -222,14 +301,200 @@ export function registerPrCommands(program: Command): void {
       const api = new PrAPI(client);
 
       try {
-        const comment = await api.addComment(owner, repo, number, opts.body);
+        let position: number | undefined;
+
+        if (opts.path) {
+          if (opts.line !== undefined && opts.position !== undefined) {
+            console.error('Error: Use either --line or --position, not both.');
+            process.exit(1);
+          }
+          if (opts.line === undefined && opts.position === undefined) {
+            console.error('Error: --path requires --line or --position.');
+            process.exit(1);
+          }
+
+          if (opts.position !== undefined) {
+            position = parsePositiveInt(opts.position, 'position');
+          } else {
+            const line = parsePositiveInt(opts.line as string, 'line');
+            const files = await api.listFiles(owner, repo, number);
+            const file = files.find((candidate) => candidate.filename === opts.path);
+            if (!file?.patch?.diff) {
+              console.error(`Error: No diff found for ${opts.path}. Use --position or omit --path for a normal comment.`);
+              process.exit(1);
+            }
+            position = resolveDiffPosition(file.patch.diff, line);
+            if (position === undefined) {
+              console.error(`Error: Line ${line} was not found on the new side of ${opts.path}'s diff.`);
+              process.exit(1);
+            }
+          }
+        } else if (opts.line !== undefined || opts.position !== undefined) {
+          console.error('Error: --line and --position require --path.');
+          process.exit(1);
+        }
+
+        let commitId = opts.commitId;
+        if (opts.path && !commitId) {
+          const pr = await api.get(owner, repo, number);
+          commitId = pr.head?.sha;
+        }
+        if (opts.path && !commitId) {
+          console.error('Error: Could not determine the commit SHA. Pass --commit-id.');
+          process.exit(1);
+        }
+
+        const comment = await api.addComment(owner, repo, number, {
+          body: opts.body,
+          path: opts.path,
+          position,
+          commit_id: commitId,
+        });
 
         if (opts.json) {
           console.log(JSON.stringify(comment, null, 2));
           return;
         }
 
-        console.log(`✓ Comment added (id: ${comment.id})`);
+        if (opts.path) {
+          const location = opts.line !== undefined
+            ? `${opts.path}:${opts.line}`
+            : `${opts.path} (position ${position})`;
+          console.log(`✓ Inline comment added on ${location} (id: ${comment.id})`);
+        } else {
+          console.log(`✓ Comment added (id: ${comment.id})`);
+        }
+      } catch (err) {
+        handleError(err);
+      }
+    });
+
+  pr
+    .command('reply <number> <comment-id>')
+    .description('Reply to a pull request comment (flat inline reply by default)')
+    .option('--repo <owner/repo>', 'Repository (owner/repo)')
+    .requiredOption('--body <comment>', 'Reply body')
+    .option('--threaded', 'Try an experimental threaded reply (in_reply_to_id)')
+    .option('--no-quote', 'Do not quote the parent comment')
+    .option('--no-mention', 'Do not mention the parent comment author')
+    .option('--json', 'Output raw JSON with reply metadata')
+    .action(async (number: string, commentId: string, opts: {
+      repo?: string;
+      body: string;
+      threaded?: boolean;
+      quote?: boolean;
+      mention?: boolean;
+      json?: boolean;
+    }) => {
+      const token = getToken();
+      if (!token) {
+        console.error('Error: Authentication required. Run `gitee-cli auth login` or set GITEE_TOKEN.');
+        process.exit(1);
+      }
+
+      const repoName = resolveRepo(opts.repo);
+      const [owner, repo] = repoName.split('/');
+
+      const client = new GiteeClient(token);
+      const api = new PrAPI(client);
+
+      try {
+        const parent = await api.getComment(owner, repo, commentId);
+        const replyBody = buildReplyBody(parent.body, parent.user?.login, opts.body, {
+          quote: opts.quote !== false,
+          mention: opts.mention !== false,
+        });
+
+        let created: PRComment | undefined;
+        let mode: 'threaded' | 'inline' | 'pr' = 'pr';
+        let position: number | undefined;
+        let fallback = false;
+        let threadedUnconfirmed = false;
+
+        if (opts.threaded) {
+          try {
+            const threaded = await api.addComment(owner, repo, number, {
+              body: replyBody,
+              in_reply_to_id: parent.id,
+            });
+
+            const repliedTo = Number(threaded.in_reply_to_id);
+            if (Number.isInteger(repliedTo) && repliedTo === parent.id) {
+              created = threaded;
+              mode = 'threaded';
+            } else {
+              threadedUnconfirmed = true;
+              fallback = true;
+              console.error('Warning: Gitee ignored in_reply_to_id; falling back to a flat reply.');
+              try {
+                await api.deleteComment(owner, repo, String(threaded.id));
+              } catch (deleteErr) {
+                console.error(`Warning: could not delete the unsupported top-level comment (${getErrorMessage(deleteErr)}).`);
+                created = threaded;
+                mode = 'pr';
+              }
+            }
+          } catch (err) {
+            fallback = true;
+            console.error(`Warning: threaded reply failed (${getErrorMessage(err)}); falling back to a flat reply.`);
+          }
+        }
+
+        if (!created && parent.path) {
+          position = await resolveParentPosition(api, owner, repo, number, parent);
+          if (position !== undefined) {
+            let commitId = parent.commit_id;
+            if (!commitId) {
+              const pr = await api.get(owner, repo, number);
+              commitId = pr.head?.sha;
+            }
+            if (commitId) {
+              created = await api.addComment(owner, repo, number, {
+                body: replyBody,
+                path: parent.path,
+                position,
+                commit_id: commitId,
+              });
+              mode = 'inline';
+            } else {
+              console.error('Warning: could not determine the parent commit; posting a normal PR comment instead.');
+            }
+          } else {
+            console.error('Warning: could not resolve the parent diff position; posting a normal PR comment instead.');
+          }
+        }
+
+        if (!created) {
+          created = await api.addComment(owner, repo, number, { body: replyBody });
+          mode = 'pr';
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify({
+            comment: created,
+            mode,
+            fallback,
+            position,
+            threaded_unconfirmed: threadedUnconfirmed || undefined,
+          }, null, 2));
+          return;
+        }
+
+        const lineLabel = parent.new_line !== undefined && parent.new_line !== null
+          ? `:${parent.new_line}`
+          : position !== undefined
+            ? ` (position ${position})`
+            : '';
+        const location = mode === 'inline' && parent.path ? ` on ${parent.path}${lineLabel}` : '';
+        const modeLabel = mode === 'threaded'
+          ? 'threaded reply'
+          : mode === 'inline'
+            ? `inline reply${location}`
+            : 'PR comment';
+        console.log(`✓ Posted ${modeLabel} (id: ${created.id})`);
+        if (fallback) {
+          console.log('  Note: threaded reply failed; a flat reply was posted instead.');
+        }
       } catch (err) {
         handleError(err);
       }
@@ -239,13 +504,27 @@ export function registerPrCommands(program: Command): void {
     .command('comments <number>')
     .description('List comments on a pull request')
     .option('--repo <owner/repo>', 'Repository (owner/repo)')
+    .option('--type <type>', 'Comment type: all|diff|pr', 'all')
     .option('--page <n>', 'Page number', '1')
     .option('--per-page <n>', 'Results per page', '20')
     .option('--json', 'Output raw JSON')
-    .action(async (number: string, opts: { repo?: string; page?: string; perPage?: string; json?: boolean }) => {
+    .action(async (number: string, opts: { repo?: string; type?: string; page?: string; perPage?: string; json?: boolean }) => {
       const token = getToken();
       const repoName = resolveRepo(opts.repo);
       const [owner, repo] = repoName.split('/');
+
+      const typeMap: Record<string, 'diff_comment' | 'pr_comment' | undefined> = {
+        all: undefined,
+        diff: 'diff_comment',
+        diff_comment: 'diff_comment',
+        pr: 'pr_comment',
+        pr_comment: 'pr_comment',
+      };
+      const requestedType = (opts.type || 'all').toLowerCase();
+      if (!(requestedType in typeMap)) {
+        console.error('Error: --type must be one of: all, diff, pr.');
+        process.exit(1);
+      }
 
       const client = new GiteeClient(token);
       const api = new PrAPI(client);
@@ -254,6 +533,7 @@ export function registerPrCommands(program: Command): void {
         const comments = await api.listComments(owner, repo, number, {
           page: parseInt(opts.page || '1'),
           per_page: parseInt(opts.perPage || '20'),
+          comment_type: typeMap[requestedType],
         });
 
         if (opts.json) {
@@ -266,10 +546,17 @@ export function registerPrCommands(program: Command): void {
           return;
         }
 
-        console.log(`Comments on PR #${number} in ${repoName}:\n`);
+        console.log(`Comments (${requestedType}) on PR #${number} in ${repoName}:\n`);
         for (const c of comments) {
-          const location = c.path ? ` · ${c.path}${c.position !== undefined ? `:${c.position}` : ''}` : '';
-          console.log(`  ── ${c.user?.login || 'unknown'} · ${GiteeClient.formatDate(c.created_at)}${location} (id: ${c.id})`);
+          const lineRef = c.new_line !== undefined && c.new_line !== null
+            ? `:${c.new_line}`
+            : c.position !== undefined && c.position !== null
+              ? `:${c.position}`
+              : '';
+          const location = c.path ? ` · ${c.path}${lineRef}` : '';
+          const typeLabel = c.comment_type === 'diff_comment' ? ' [diff]' : '';
+          const replyLabel = c.in_reply_to_id ? ` (reply to ${c.in_reply_to_id})` : '';
+          console.log(`  ── ${c.user?.login || 'unknown'} · ${GiteeClient.formatDate(c.created_at)}${location}${typeLabel}${replyLabel} (id: ${c.id})`);
           const lines = c.body.split('\n');
           for (const line of lines) {
             console.log(`     ${line}`);
@@ -466,8 +753,14 @@ export function registerPrCommands(program: Command): void {
 
         console.log(`Review comments on PR #${number} (${repoName}):\n`);
         for (const c of comments) {
-          const fileInfo = c.path ? `\x1b[33m${c.path}${c.position !== undefined ? `:${c.position}` : ''}\x1b[0m · ` : '';
-          console.log(`  ── ${fileInfo}${c.user?.login || 'unknown'} · ${GiteeClient.formatDate(c.created_at)} (id: ${c.id})`);
+          const lineRef = c.new_line !== undefined && c.new_line !== null
+            ? `:${c.new_line}`
+            : c.position !== undefined && c.position !== null
+              ? `:${c.position}`
+              : '';
+          const fileInfo = c.path ? `\x1b[33m${c.path}${lineRef}\x1b[0m · ` : '';
+          const replyLabel = c.in_reply_to_id ? ` (reply to ${c.in_reply_to_id})` : '';
+          console.log(`  ── ${fileInfo}${c.user?.login || 'unknown'} · ${GiteeClient.formatDate(c.created_at)}${replyLabel} (id: ${c.id})`);
           const lines = c.body.split('\n');
           for (const line of lines) {
             console.log(`     ${line}`);

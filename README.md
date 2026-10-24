@@ -139,7 +139,13 @@ gitee-cli pr close <number>                     # 关闭 PR
 
 # Comments
 gitee-cli pr comment <number> --body "LGTM"     # 添加 PR 评论
+gitee-cli pr comment <number> --body "..." --path src/a.ts --line 42       # 行内评论（按文件行号）
+gitee-cli pr comment <number> --body "..." --path src/a.ts --position 18   # 行内评论（按 diff position）
 gitee-cli pr comments <number>                  # 列出 PR 所有评论
+gitee-cli pr comments <number> --type diff      # 只看代码行评论
+gitee-cli pr comments <number> --type pr        # 只看普通 PR 评论
+gitee-cli pr reply <number> <comment-id> --body "..."            # 回复评论（同位置平铺）
+gitee-cli pr reply <number> <comment-id> --body "..." --threaded # 尝试线程回复（实验）
 
 # Code Review
 gitee-cli pr files <number>                     # 列出变更文件（含增删行数，彩色输出）
@@ -149,6 +155,11 @@ gitee-cli pr review <number> --action request_changes        # 请求修改
 gitee-cli pr review <number> --action comment --body "..."   # 提交 review 评论
 gitee-cli pr review-comments <number>           # 列出 review 评论
 ```
+
+> **Gitee API 限制**：官方 OpenAPI v5 不支持创建线程回复，也不支持标记评论“已解决”。
+> `pr reply` 默认在父评论同一 diff 位置发布平铺回复（引用 + `@作者`）；`--threaded` 尝试未文档化的
+> `in_reply_to_id`，实测 Gitee 会忽略该字段，CLI 会删除临时顶层评论并回退为平铺回复。
+> 需要标记“已解决”时，请在 Gitee 页面操作或使用 browser-agent。
 
 ### Release
 

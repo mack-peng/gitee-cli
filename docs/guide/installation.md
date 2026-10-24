@@ -179,7 +179,13 @@ gitee-cli pr merge 1 --method squash            # Squash merge
 gitee-cli pr merge 1 --method rebase            # Rebase merge
 gitee-cli pr close 1                            # Close PR #1
 gitee-cli pr comment 1 --body "LGTM"
+gitee-cli pr comment 1 --body "..." --path src/a.ts --line 42       # Inline comment by file line
+gitee-cli pr comment 1 --body "..." --path src/a.ts --position 18   # Inline comment by diff position
 gitee-cli pr comments 1                         # List PR comments
+gitee-cli pr comments 1 --type diff             # Only diff (inline) comments
+gitee-cli pr comments 1 --type pr               # Only regular PR comments
+gitee-cli pr reply 1 <comment-id> --body "..."            # Flat inline reply
+gitee-cli pr reply 1 <comment-id> --body "..." --threaded # Experimental threaded reply
 gitee-cli pr files 1                            # Changed files with stats
 gitee-cli pr diff 1                             # Colorized diff (+green -red)
 gitee-cli pr review 1 --action approve          # Approve PR
@@ -187,6 +193,12 @@ gitee-cli pr review 1 --action request_changes  # Request changes
 gitee-cli pr review 1 --action comment --body "..."  # Review comment
 gitee-cli pr review-comments 1                  # List review comments
 ```
+
+> **Gitee API limitation**: Gitee OpenAPI v5 does not support creating threaded replies or resolving
+> comments. `pr reply` posts a flat reply at the same diff position by default (quote + `@author`);
+> `--threaded` tries the undocumented `in_reply_to_id` field. Gitee currently ignores it, so the CLI
+> deletes the temporary top-level comment and falls back to a flat reply.
+> To mark a comment resolved, use the Gitee web UI or browser-agent.
 
 ### Release Management
 

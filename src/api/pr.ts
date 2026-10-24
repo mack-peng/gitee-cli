@@ -25,9 +25,29 @@ export interface PRComment {
   user?: { login: string };
   created_at: string;
   updated_at: string;
+  path?: string | null;
+  position?: number | string | null;
+  original_position?: number | string | null;
+  new_line?: number | string | null;
+  commit_id?: string | null;
+  original_commit_id?: string | null;
+  comment_type?: 'diff_comment' | 'pr_comment' | string;
+  in_reply_to_id?: number | null;
+  html_url?: string;
+}
+
+export interface PRCommentCreateParams {
+  body: string;
+  commit_id?: string;
   path?: string;
   position?: number;
-  commit_id?: string;
+  in_reply_to_id?: number;
+}
+
+export interface PRCommentListParams {
+  page?: number;
+  per_page?: number;
+  comment_type?: 'diff_comment' | 'pr_comment';
 }
 
 export interface PRFile {
@@ -104,18 +124,35 @@ export class PrAPI {
     });
   }
 
-  async addComment(owner: string, repo: string, number: string, body: string): Promise<PRComment> {
+  async addComment(owner: string, repo: string, number: string, params: PRCommentCreateParams): Promise<PRComment> {
+    const body: Record<string, unknown> = { body: params.body };
+    if (params.commit_id) body.commit_id = params.commit_id;
+    if (params.path) body.path = params.path;
+    if (params.position !== undefined) body.position = params.position;
+    if (params.in_reply_to_id !== undefined) body.in_reply_to_id = params.in_reply_to_id;
+
     return this.client.request<PRComment>(`/repos/${owner}/${repo}/pulls/${number}/comments`, {
       method: 'POST',
-      body: { body },
+      body,
     });
   }
 
-  async listComments(owner: string, repo: string, number: string, params: { page?: number; per_page?: number } = {}): Promise<PRComment[]> {
+  async getComment(owner: string, repo: string, id: string): Promise<PRComment> {
+    return this.client.request<PRComment>(`/repos/${owner}/${repo}/pulls/comments/${id}`);
+  }
+
+  async deleteComment(owner: string, repo: string, id: string): Promise<void> {
+    await this.client.request(`/repos/${owner}/${repo}/pulls/comments/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async listComments(owner: string, repo: string, number: string, params: PRCommentListParams = {}): Promise<PRComment[]> {
     return this.client.request<PRComment[]>(`/repos/${owner}/${repo}/pulls/${number}/comments`, {
       params: {
         page: params.page || 1,
         per_page: params.per_page || 20,
+        comment_type: params.comment_type,
       },
     });
   }
@@ -135,11 +172,9 @@ export class PrAPI {
   }
 
   async listReviewComments(owner: string, repo: string, number: string, params: { page?: number; per_page?: number } = {}): Promise<PRComment[]> {
-    return this.client.request<PRComment[]>(`/repos/${owner}/${repo}/pulls/${number}/comments`, {
-      params: {
-        page: params.page || 1,
-        per_page: params.per_page || 20,
-      },
+    return this.listComments(owner, repo, number, {
+      ...params,
+      comment_type: 'diff_comment',
     });
   }
 }
